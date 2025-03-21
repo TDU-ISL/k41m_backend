@@ -1,0 +1,25 @@
+# バックエンド側の開発用に用いるskaffold設定ファイル
+# 詳細参照: https://skaffold.dev/docs/references/yaml/
+apiVersion: skaffold/v4beta11
+kind: Config
+metadata:
+  name: dev
+build:
+  local:
+    push: true
+  artifacts:
+    - image: hiroto1212/isl-k8s-backend # ここはそれぞれ環境に合わせて変更する
+      context: .
+      docker:
+        dockerfile: Dockerfile
+      # TODO: main.goが変更されたらビルドするようにする
+      sync:
+        manual:
+          - src: '**/*'
+            dest: '.'
+deploy:
+  # ここはそれぞれ環境に合わせて変更する
+  kubeContext: isl-k8s
+manifests:
+  rawYaml:
+    - k8s_manifests/*.yaml

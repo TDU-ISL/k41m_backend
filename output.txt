@@ -1,0 +1,1518 @@
+--- internal/utils/merge.go ---
+package utils
+
+func MergeOptions(defaultBody, customOptions map[string]interface{}) map[string]interface{} {
+	for key, value := range customOptions {
+		defaultBody[key] = value
+	}
+	return defaultBody
+}
+
+
+--- internal/utils/status.go ---
+package utils
+
+func CalculateChecklistItemStatus(controls []map[string]interface{}) string {
+	hasFailed := false
+	hasSkipped := false
+	allPassed := true
+
+	for _, control := range controls {
+		status := control["status"].(string)
+		if status == "failed" {
+			hasFailed = true
+			allPassed = false
+		} else if status == "skipped" {
+			hasSkipped = true
+			allPassed = false
+		} else if status == "passed" {
+			// Do nothing, it's already considered passed
+		}
+	}
+
+	if hasFailed {
+		return "failed"
+	}
+	if hasSkipped && !hasFailed {
+		return "skipped"
+	}
+	if allPassed {
+		return "passed"
+	}
+	return "unknown" // デフォルトのケース
+}
+
+
+--- internal/utils/parse.go ---
+package utils
+
+import (
+
+	"fmt"
+	"encoding/json"
+	"log"
+)
+
+// JSON文字列をGoの構造にパースするユーティリティ関数
+func ParseJSONString(jsonStr string) interface{} {
+	var result interface{}
+	err := json.Unmarshal([]byte(jsonStr), &result)
+	if err != nil {
+		log.Printf("JSONパースエラー: %v\nJSON: %s", err, jsonStr)
+		// エラー時のデフォルト値
+		return map[string]interface{}{
+			"error": fmt.Sprintf("Invalid JSON: %v", err),
+		}
+	}
+	return result
+}
+
+func ToJSON(data interface{}) string {
+	jsonData, _ := json.Marshal(data)
+	return string(jsonData)
+}
+
+--- internal/handlers/checklist.go ---
+package handlers
+
+import (
+	"net/http"
+	"os"
+
+	"scan_backend/internal/services"
+
+	"github.com/gin-gonic/gin"
+)
+
+func GetChecklistItems(c *gin.Context) {
+	// クエリパラメータからフェーズを取得
+	phase := c.DefaultQuery("phase", "")
+
+	// サービス層でデータを取得
+	items, err := services.GetChecklistItems(phase)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve checklist items"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"checklist_items": items})
+}
+
+func UploadChecklist(c *gin.Context) {
+	file, err := c.FormFile("file")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "File is required"})
+		return
+	}
+
+	tempFilePath := "./temp_upload_" + file.Filename
+	if err := c.SaveUploadedFile(file, tempFilePath); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save file"})
+		return
+	}
+	defer os.Remove(tempFilePath)
+
+	message, err := services.ProcessChecklistFile(tempFilePath)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": message})
+}
+
+--- internal/handlers/scan_start.go ---
+package handlers
+
+import (
+	"net/http"
+	"time"
+	"scan_backend/internal/services"
+	"scan_backend/models"
+
+	"github.com/gin-gonic/gin"
+)
+
+// func StartBuildScan(c *gin.Context) {
+// 	var req struct {
+// 		Phase   string                 `json:"phase"`
+// 		Tool    string                 `json:"tool"`
+// 		Options map[string]interface{} `json:"options"`
+// 	}
+
+// 	if err := c.ShouldBindJSON(&req); err != nil {
+// 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+// 		return
+// 	}
+
+// 	// スキャン概要の登録
+// 	scan := models.ScanSummary{
+// 		Phase:    req.Phase,
+// 		Tool:     req.Tool,
+// 		ScanTime: time.Now(),
+// 		Status:   "running",
+// 	}
+// 	if err := services.SaveScanSummary(&scan); err != nil {
+// 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to initialize scan"})
+// 		return
+// 	}
+
+// 	// 非同期でスキャンを実行
+// 	go func(scanID int, tool string, options map[string]interface{}) {
+// 		var err error
+
+// 		switch tool {
+// 		case "Trivy":
+// 			err = services.RunTrivy(scanID, options)
+// 		default:
+// 			err = services.UpdateScanStatus(scanID, "failed")
+// 		}
+
+// 		if err != nil {
+// 			services.UpdateScanStatus(scanID, "failed")
+// 			return
+// 		}
+
+// 		services.UpdateScanStatus(scanID, "completed")
+// 	}(int(scan.ID), req.Tool, req.Options)
+
+// 	c.JSON(http.StatusOK, gin.H{"scan_id": scan.ID, "status": "running"})
+// }
+
+func StartScan(c *gin.Context) {
+	var req struct {
+		Phase   string                 `json:"phase"`
+		Tool    string                 `json:"tool"`
+		Options map[string]interface{} `json:"options"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// スキャン概要の登録
+	scan := models.ScanSummary{
+		Phase:    req.Phase,
+		Tool:     req.Tool,
+		ScanTime: time.Now(),
+		Status:   "running",
+	}
+	if err := services.SaveScanSummary(&scan); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to initialize scan"})
+		return
+	}
+
+	// フェーズごとに処理を分岐
+	go func(scanID int, phase, tool string, options map[string]interface{}) {
+		var err error
+
+		switch phase {
+		case "Build":
+			err = services.RunBuildScan(scanID, tool, options)
+		case "Deploy":
+			err = services.RunDeployScan(scanID, tool, options)
+		case "Post-Deploy":
+			err = services.RunPostDeployScan(scanID, tool, options)
+		default:
+			err = services.UpdateScanStatus(scanID, "failed")
+		}
+
+		if err != nil {
+			services.UpdateScanStatus(scanID, "failed")
+			return
+		}
+
+		services.UpdateScanStatus(scanID, "completed")
+	}(int(scan.ID), req.Phase, req.Tool, req.Options)
+
+	c.JSON(http.StatusOK, gin.H{"scan_id": scan.ID, "status": "running"})
+}
+
+--- internal/handlers/monitoring.go ---
+package handlers
+
+import (
+	"net/http"
+	"scan_backend/internal/services"
+
+	"github.com/gin-gonic/gin"
+)
+
+// ツールから通知を受け取り、データベースに保存する
+// 現状falcoからの通知のみを想定しているため、他ツールを使う場合には拡張が必要
+func ReceiveMonitorNotification(c *gin.Context) {
+	var payload map[string]interface{}
+
+	// リクエストボディをバインド
+	if err := c.ShouldBindJSON(&payload); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid JSON payload"})
+		return
+	}
+
+	// 必須フィールドを抽出
+	tool, ok := payload["tool"].(string)
+	if !ok || tool == "" {
+		tool = "Falco" // 今の所falcoのみを想定
+	}
+
+	ruleName, ok := payload["rule"].(string)
+	if !ok || ruleName == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing or invalid 'rule' field"})
+		return
+	}
+
+	receivedAt, ok := payload["time"].(string)
+	if !ok || receivedAt == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing or invalid 'time' field"})
+		return
+	}
+
+	//  不要なフィールドを削除し、その他のデータを details に格納
+	delete(payload, "rule")
+	delete(payload, "time")
+
+	err := services.SaveMonitorNotification(tool, ruleName, receivedAt, payload)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save notification"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Notification received and saved"})
+}
+
+
+func GetMonitorDetails(c *gin.Context) {
+	results, err := services.GetMonitorDetails()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve monitor details"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"monitor_detail": results,
+	})
+}
+
+--- internal/handlers/scan_detail.go ---
+// func GetScanDetails(c *gin.Context) {
+// 	scanID := c.Param("scan_id")
+
+// 	// スキャン結果を取得
+// 	result, err := services.GetScanDetails(scanID)
+// 	if err != nil {
+// 		c.JSON(http.StatusNotFound, gin.H{"error": "Scan not found"})
+// 		return
+// 	}
+
+// 	// レスポンス
+// 	c.JSON(http.StatusOK, gin.H{"scan_detail": result})
+// }
+
+package handlers
+
+import (
+	"net/http"
+	"scan_backend/internal/services"
+
+	"github.com/gin-gonic/gin"
+)
+
+func GetScanDetails(c *gin.Context) {
+	scanID := c.Param("scan_id")
+	phase := c.DefaultQuery("phase", "Build") // デフォルトはビルドフェーズ
+
+	var result map[string]interface{}
+	var err error
+
+	switch phase {
+	case "Build":
+		result, err = services.GetBuildScanDetails(scanID)
+	case "Deploy":
+		result, err = services.GetDeployScanDetails(scanID)
+	// // デプロイ後(運用・監視)フェーズの処理は未実装
+	// case "Post-Deploy":
+	// 	result, err = services.GetPostDeployScanDetails(scanID)
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid phase"})
+		return
+	}
+
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Scan not found"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"scan_detail": result})
+}
+
+
+--- internal/handlers/scan_history.go ---
+package handlers
+
+import (
+	"net/http"
+	"scan_backend/internal/services"
+
+	"github.com/gin-gonic/gin"
+)
+
+func GetScanHistory(c *gin.Context) {
+	// クエリパラメータからフェーズを取得
+	phase := c.DefaultQuery("phase", "")
+
+	// サービス層でデータを取得
+	history, err := services.GetScanHistory(phase)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve scan history"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"scan_history": history})
+}
+
+
+--- internal/services/scan_service.go ---
+package services
+
+import (
+	"scan_backend/internal/utils"
+	"scan_backend/models"
+)
+
+func SaveScanSummary(scan *models.ScanSummary) error {
+	return db.Create(scan).Error
+}
+
+func UpdateScanStatus(scanID int, status string) error {
+	return db.Model(&models.ScanSummary{}).Where("id = ?", scanID).Update("status", status).Error
+}
+
+// リファクタリング前のコード
+func GetBuildScanDetails(scanID string) (map[string]interface{}, error) {
+	var scan models.ScanSummary
+
+	// スキャン概要を取得
+	if err := db.First(&scan, "id = ?", scanID).Error; err != nil {
+		return nil, err
+	}
+
+	var targets []models.ScanTarget
+	db.Where("scan_summary_id = ?", scanID).Find(&targets)
+
+	results := []map[string]interface{}{}
+
+	for _, target := range targets {
+		checklistItemMap := map[uint]map[string]interface{}{}
+
+		// 各ターゲットに紐付くコントロールを取得
+		var controls []models.ScanControl
+		db.Where("scan_target_id = ?", target.ID).Find(&controls)
+
+		for _, control := range controls {
+			// マッピングルールからチェックリスト項目を特定
+			var mappings []models.MappingRule
+			db.Where("tool_name = ? AND expected_value = ?", scan.Tool, control.ControlID).Find(&mappings)
+
+			for _, mapping := range mappings {
+				// チェックリスト項目情報を取得
+				var checklistItem models.ChecklistItem
+				if err := db.First(&checklistItem, "id = ?", mapping.ChecklistItemID).Error; err != nil {
+					continue
+				}
+
+				// チェックリスト項目がすでにマップに存在するか確認
+				if _, exists := checklistItemMap[checklistItem.ID]; !exists {
+					// セキュリティスタンダードとセクションを取得
+					var standards []models.ChecklistItemSecurityStandard
+					db.Preload("Sections").Preload("SecurityStandard").Where("checklist_item_id = ?", checklistItem.ID).Find(&standards)
+
+					securityStandards := []map[string]interface{}{}
+					for _, standard := range standards {
+						sections := []string{}
+						for _, section := range standard.Sections {
+							sections = append(sections, section.Section)
+						}
+						securityStandards = append(securityStandards, map[string]interface{}{
+							"ChecklistItemID":   standard.ChecklistItemID,
+							"ID":                standard.ID,
+							"Sections":          sections,
+							"SecurityStandardID": standard.SecurityStandardID,
+							"Name":              standard.SecurityStandard.Name,
+							"Version":           standard.SecurityStandard.Version,
+						})
+					}
+
+					// 新しいチェックリスト項目を作成
+					checklistItemMap[checklistItem.ID] = map[string]interface{}{
+						"checklist_item_id": checklistItem.ID,
+						"phase":             checklistItem.Phase,
+						"category":          checklistItem.Category,
+						"subcategory":       checklistItem.Subcategory,
+						"description":       checklistItem.Description,
+						"severity":          checklistItem.Severity,
+						"controls":          []map[string]interface{}{},
+						"security_standards": securityStandards,
+					}
+				}
+
+				// 現在のコントロールを既存のチェックリスト項目に追加
+				checklistItemMap[checklistItem.ID]["controls"] = append(
+					checklistItemMap[checklistItem.ID]["controls"].([]map[string]interface{}),
+					map[string]interface{}{
+						"control_id":   control.ControlID,
+						"control_name": control.ControlName,
+						"details":      utils.ParseJSONString(control.ControlDetails),
+						"id":           control.ID,
+						"status":       control.ControlStatus,
+					},
+				)
+			}
+		}
+
+		// マップをリスト形式に変換
+		checklistItems := []map[string]interface{}{}
+		for _, item := range checklistItemMap {
+			checklistItems = append(checklistItems, item)
+		}
+
+		// 対象情報をレスポンスに追加
+		results = append(results, map[string]interface{}{
+			"target_name":     target.TargetName,
+			"metadata":        utils.ParseJSONString(target.TargetMetadata),
+			"checklist_items": checklistItems,
+		})
+	}
+
+	return map[string]interface{}{
+		"scan_id": scan.ID,
+		"phase":   scan.Phase,
+		"tool":    scan.Tool,
+		"status":  scan.Status,
+		"results": results,
+	}, nil
+}
+
+func GetDeployScanDetails(scanID string) (map[string]interface{}, error) {
+	var scan models.ScanSummary
+
+	// スキャン概要を取得
+	if err := db.First(&scan, "id = ?", scanID).Error; err != nil {
+		return nil, err
+	}
+
+	var targets []models.ScanTarget
+	db.Where("scan_summary_id = ?", scanID).Find(&targets)
+
+	results := []map[string]interface{}{}
+
+	for _, target := range targets {
+		checklistItemMap := map[uint]map[string]interface{}{}
+
+		// 各ターゲットに紐付くコントロールを取得
+		var controls []models.ScanControl
+		db.Where("scan_target_id = ?", target.ID).Find(&controls)
+
+		for _, control := range controls {
+			// マッピングルールからチェックリスト項目を特定
+			var mappings []models.MappingRule
+			db.Where("tool_name = ? AND expected_value = ?", scan.Tool, control.ControlID).Find(&mappings)
+
+			for _, mapping := range mappings {
+				// チェックリスト項目情報を取得
+				var checklistItem models.ChecklistItem
+				if err := db.First(&checklistItem, "id = ?", mapping.ChecklistItemID).Error; err != nil {
+					continue
+				}
+
+				// チェックリスト項目がすでにマップに存在するか確認
+				if _, exists := checklistItemMap[checklistItem.ID]; !exists {
+					// セキュリティスタンダードとセクションを取得
+					var standards []models.ChecklistItemSecurityStandard
+					db.Preload("Sections").Preload("SecurityStandard").Where("checklist_item_id = ?", checklistItem.ID).Find(&standards)
+
+					securityStandards := []map[string]interface{}{}
+					for _, standard := range standards {
+						sections := []string{}
+						for _, section := range standard.Sections {
+							sections = append(sections, section.Section)
+						}
+						securityStandards = append(securityStandards, map[string]interface{}{
+							"ChecklistItemID":   standard.ChecklistItemID,
+							"ID":                standard.ID,
+							"Sections":          sections,
+							"SecurityStandardID": standard.SecurityStandardID,
+							"Name":              standard.SecurityStandard.Name,
+							"Version":           standard.SecurityStandard.Version,
+						})
+					}
+
+					// 新しいチェックリスト項目を作成
+					checklistItemMap[checklistItem.ID] = map[string]interface{}{
+						"checklist_item_id": checklistItem.ID,
+						"phase":             checklistItem.Phase,
+						"category":          checklistItem.Category,
+						"subcategory":       checklistItem.Subcategory,
+						"description":       checklistItem.Description,
+						"severity":          checklistItem.Severity,
+						"controls":          []map[string]interface{}{},
+						"security_standards": securityStandards,
+						"status":            "",
+					}
+				}
+
+				// 現在のコントロールを既存のチェックリスト項目に追加
+				checklistItemMap[checklistItem.ID]["controls"] = append(
+					checklistItemMap[checklistItem.ID]["controls"].([]map[string]interface{}),
+					map[string]interface{}{
+						"control_id":   control.ControlID,
+						"control_name": control.ControlName,
+						"details":      utils.ParseJSONString(control.ControlDetails),
+						"status":       control.ControlStatus, // コントロールのステータス
+					},
+				)
+			}
+		}
+
+		// マップをリスト形式に変換し、statusを計算
+		checklistItems := []map[string]interface{}{}
+		for _, item := range checklistItemMap {
+			// controls のステータスを集計して checklist_item のステータスを設定
+			controls := item["controls"].([]map[string]interface{})
+			item["status"] = utils.CalculateChecklistItemStatus(controls)
+
+			checklistItems = append(checklistItems, item)
+		}
+
+		// 対象情報をレスポンスに追加
+		results = append(results, map[string]interface{}{
+			"target_name":     target.TargetName,
+			"metadata":        utils.ParseJSONString(target.TargetMetadata),
+			"checklist_items": checklistItems,
+		})
+	}
+
+	return map[string]interface{}{
+		"scan_id": scan.ID,
+		"phase":   scan.Phase,
+		"tool":    scan.Tool,
+		"status":  scan.Status,
+		"results": results,
+	}, nil
+}
+
+
+--- internal/services/scan_deploy_phase.go ---
+package services
+
+import (
+	"fmt"
+)
+
+func RunDeployScan(scanID int, tool string, options map[string]interface{}) error {
+	switch tool {
+	case "Kubescape":
+		return RunKubescape(scanID, options)
+	default:
+		return fmt.Errorf("unsupported tool for Deploy phase: %s", tool)
+	}
+}
+
+
+--- internal/services/scan_monitoring_phase.go ---
+// デプロイ後(運用・監視)フェーズは現状スキャンは実装せず、ツール(falco)からの通知を受け取って処理を行う
+package services
+
+import (
+	"fmt"
+)
+
+func RunPostDeployScan(scanID int, tool string, options map[string]interface{}) error {
+	// デプロイ後(運用・監視)フェーズの処理は未実装
+	return fmt.Errorf("Post-Deploy phase is not yet implemented")
+}
+
+--- internal/services/checklistitems.go ---
+package services
+
+import (
+	"encoding/csv"
+	"errors"
+	"os"
+	"path/filepath"
+	"strconv"
+	"fmt"
+
+	"github.com/xuri/excelize/v2"
+
+	"scan_backend/models"
+)
+
+func GetChecklistItems(phase string) ([]map[string]interface{}, error) {
+	var checklistItems []models.ChecklistItem
+	query := db
+
+	// フェーズが指定されている場合はフィルタリング
+	if phase != "" {
+		query = query.Where("phase = ?", phase)
+	}
+
+	if err := query.Find(&checklistItems).Error; err != nil {
+		return nil, err
+	}
+
+	// レスポンス構造を構築
+	response := []map[string]interface{}{}
+	for _, item := range checklistItems {
+		// セキュリティスタンダードを取得
+		var standards []models.ChecklistItemSecurityStandard
+		db.Preload("Sections").Preload("SecurityStandard").Where("checklist_item_id = ?", item.ID).Find(&standards)
+
+		securityStandards := []map[string]interface{}{}
+		for _, standard := range standards {
+			sections := []string{}
+			for _, section := range standard.Sections {
+				sections = append(sections, section.Section)
+			}
+			securityStandards = append(securityStandards, map[string]interface{}{
+				"ChecklistItemID":   standard.ChecklistItemID,
+				"ID":                standard.ID,
+				"Sections":          sections,
+				"SecurityStandardID": standard.SecurityStandardID,
+				"Name":              standard.SecurityStandard.Name,
+				"Version":           standard.SecurityStandard.Version,
+			})
+		}
+
+		// マッピングルールを取得
+		var mappingRules []models.MappingRule
+		db.Where("checklist_item_id = ?", item.ID).Find(&mappingRules)
+
+		mappingRulesResp := []map[string]interface{}{}
+		for _, rule := range mappingRules {
+			mappingRulesResp = append(mappingRulesResp, map[string]interface{}{
+				"tool_name":      rule.ToolName,
+				"expected_value": rule.ExpectedValue,
+			})
+		}
+
+		// 各チェックリスト項目をレスポンス形式に整形
+		response = append(response, map[string]interface{}{
+			"checklist_item_id": item.ID,
+			"phase":             item.Phase,
+			"category":          item.Category,
+			"subcategory":       item.Subcategory,
+			"description":       item.Description,
+			"severity":          item.Severity,
+			"security_standards": securityStandards,
+			"mapping_rules":      mappingRulesResp,
+		})
+	}
+
+	return response, nil
+}
+
+// ProcessChecklistFile は、Excel または CSV ファイルを処理し、データを DB に保存する
+func ProcessChecklistFile(filePath string) (string, error) {
+	ext := filepath.Ext(filePath)
+	var csvFilePath string
+	var err error
+
+	// ファイル形式を判別
+	if ext == ".xlsx" {
+		csvFilePath, err = convertExcelToCSV(filePath)
+		if err != nil {
+			return "", fmt.Errorf("Excel to CSV conversion failed: %v", err)
+		}
+		defer os.Remove(csvFilePath) // 処理終了後に削除
+	} else if ext == ".csv" {
+		csvFilePath = filePath
+	} else {
+		return "", errors.New("Unsupported file format. Only .xlsx and .csv are allowed")
+	}
+
+	// データベースを初期化
+	if err := clearTables(); err != nil {
+		return "", fmt.Errorf("Failed to clear tables: %v", err)
+	}
+
+	// CSVを処理してDBに保存
+	if err := processAndSaveCSV(csvFilePath); err != nil {
+		return "", fmt.Errorf("Failed to process and save CSV data: %v", err)
+	}
+
+	return "Checklist items successfully uploaded and saved.", nil
+}
+
+// 前処理としてデータベースのテーブルをクリア
+func clearTables() error {
+	if err := db.Exec("SET session_replication_role = 'replica';").Error; err != nil {
+		return fmt.Errorf("Failed to disable foreign key constraints: %v", err)
+	}
+
+	tables := []string{
+		"checklist_item_security_standards",
+		"checklist_item_standard_sections",
+		"checklist_items",
+		"mapping_rules",
+	}
+
+	for _, table := range tables {
+		if err := db.Exec(fmt.Sprintf("DELETE FROM %s", table)).Error; err != nil {
+			return fmt.Errorf("Failed to clear table %s: %v", table, err)
+		}
+	}
+
+	if err := db.Exec("SET session_replication_role = 'origin';").Error; err != nil {
+		return fmt.Errorf("Failed to re-enable foreign key constraints: %v", err)
+	}
+
+	return nil
+}
+
+
+// ExcelファイルをCSVに変換
+func convertExcelToCSV(excelFilePath string) (string, error) {
+	f, err := excelize.OpenFile(excelFilePath)
+	if err != nil {
+		return "", fmt.Errorf("Failed to open Excel file: %v", err)
+	}
+	defer f.Close()
+
+	sheetNames := f.GetSheetList()
+	if len(sheetNames) == 0 {
+		return "", errors.New("No valid sheets found in Excel file")
+	}
+
+	sheetName := sheetNames[0]
+	if sheetName == "" {
+		return "", errors.New("Sheet name is empty")
+	}
+
+	csvFilePath := "temp.csv"
+	csvFile, err := os.Create(csvFilePath)
+	if err != nil {
+		return "", fmt.Errorf("Failed to create CSV file: %v", err)
+	}
+	defer csvFile.Close()
+
+	writer := csv.NewWriter(csvFile)
+	rows, err := f.GetRows(sheetName)
+	if err != nil {
+		return "", fmt.Errorf("Failed to read rows from sheet '%s': %v", sheetName, err)
+	}
+
+	if len(rows) == 0 {
+		return "", fmt.Errorf("Sheet '%s' has no data", sheetName)
+	}
+
+	// 最大列数を計算して行の長さを揃える
+	maxCols := 0
+	for _, row := range rows {
+		if len(row) > maxCols {
+			maxCols = len(row)
+		}
+	}
+
+	for _, row := range rows {
+		for len(row) < maxCols {
+			row = append(row, "")
+		}
+		if err := writer.Write(row); err != nil {
+			return "", fmt.Errorf("Error writing to CSV: %v", err)
+		}
+	}
+	writer.Flush()
+
+	return csvFilePath, nil
+}
+
+// CSVを処理してDBに保存
+func processAndSaveCSV(csvFilePath string) error {
+	file, err := os.Open(csvFilePath)
+	if err != nil {
+		return fmt.Errorf("Failed to open CSV file: %v", err)
+	}
+	defer file.Close()
+
+	reader := csv.NewReader(file)
+	data, err := reader.ReadAll()
+	if err != nil {
+		return fmt.Errorf("Failed to read CSV data: %v", err)
+	}
+
+	if len(data) < 2 {
+		return errors.New("CSV file has no valid data")
+	}
+
+	previousRow := make([]string, len(data[0])) // 前回の行を保持
+	groupedData := make(map[int][][]string)    // checklist_item_id ごとにデータをグループ化
+
+	// データをグループ化
+	for i, row := range data {
+		if i < 2 {
+			continue // ヘッダー行をスキップ
+		}
+
+		// 欠損値を直前の行データで埋める
+		for j := 0; j < len(row); j++ {
+			if row[j] == "" {
+				row[j] = previousRow[j]
+			}
+		}
+		copy(previousRow, row)
+
+		checklistItemID, err := strconv.Atoi(row[0]) // A列 (checklist_item_id)
+		if err != nil {
+			return fmt.Errorf("Invalid checklist_item_id in row %d: %v", i+1, err)
+		}
+		groupedData[checklistItemID] = append(groupedData[checklistItemID], row)
+	}
+
+	// グループ化されたデータを処理
+	for _, rows := range groupedData {
+		// ChecklistItem の保存または取得
+		var item models.ChecklistItem
+		if err := db.FirstOrCreate(&item, models.ChecklistItem{
+			Phase:       rows[0][1],
+			Category:    rows[0][2],
+			Subcategory: rows[0][3],
+			Description: rows[0][4],
+			Severity:    rows[0][5],
+		}).Error; err != nil {
+			return fmt.Errorf("Failed to save or retrieve checklist item: %v", err)
+		}
+
+		// MappingRules の保存
+		for _, row := range rows {
+			if row[6] != "" && row[7] != "" {
+				var mappingRule models.MappingRule
+				if err := db.FirstOrCreate(&mappingRule, models.MappingRule{
+					ToolName:      row[6],
+					ExpectedValue: row[7],
+					ChecklistItemID: item.ID,
+				}).Error; err != nil {
+					return fmt.Errorf("Failed to save or retrieve mapping rule: %v", err)
+				}
+			}
+		}
+
+		// SecurityStandards の保存
+		for _, row := range rows {
+			if row[8] != "" && row[9] != "" && row[10] != "" {
+				var standard models.SecurityStandard
+				if err := db.FirstOrCreate(&standard, models.SecurityStandard{
+					Name:    row[8],
+					Version: row[9],
+				}).Error; err != nil {
+					return fmt.Errorf("Failed to save or retrieve security standard: %v", err)
+				}
+
+				// ChecklistItemSecurityStandard の保存
+				var checklistStandard models.ChecklistItemSecurityStandard
+				if err := db.FirstOrCreate(&checklistStandard, models.ChecklistItemSecurityStandard{
+					ChecklistItemID:    item.ID,
+					SecurityStandardID: standard.ID,
+				}).Error; err != nil {
+					return fmt.Errorf("Failed to save or retrieve checklist item security standard: %v", err)
+				}
+
+				// ChecklistItemStandardSection の保存
+				if err := db.FirstOrCreate(&models.ChecklistItemStandardSection{}, models.ChecklistItemStandardSection{
+					ChecklistItemStandardID: checklistStandard.ID,
+					Section:                 row[10],
+				}).Error; err != nil {
+					return fmt.Errorf("Failed to save or retrieve checklist item standard section: %v", err)
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+--- internal/services/scan_build_phase.go ---
+package services
+
+import (
+	"fmt"
+)
+
+func RunBuildScan(scanID int, tool string, options map[string]interface{}) error {
+	switch tool {
+	case "Trivy":
+		return RunTrivy(scanID, options)
+	default:
+		return fmt.Errorf("unsupported tool for Build phase: %s", tool)
+	}
+}
+
+--- internal/services/database.go ---
+package services
+
+import (
+	"log"
+	"os"
+	"scan_backend/models"
+
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
+)
+
+var db *gorm.DB
+
+func InitDatabase() error {
+	var err error
+
+	// データベース接続文字列
+	dsn := os.Getenv("DATABASE_URL")
+	if dsn == "" {
+		dsn = "host=postgresql user=user password=password dbname=mydb port=5432 sslmode=disable"
+	}
+
+	// データベース接続
+	db, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	if err != nil {
+		log.Fatalf("Failed to connect to database: %v", err)
+	}
+
+	err = db.AutoMigrate(
+		&models.ScanSummary{},
+		&models.ScanTarget{},
+		&models.ScanControl{},
+		&models.ChecklistItem{},
+		&models.MappingRule{},
+		&models.SecurityStandard{},
+		&models.ChecklistItemSecurityStandard{},
+		&models.ChecklistItemStandardSection{},
+		&models.MonitorNotification{},
+	)
+	if err != nil {
+		log.Fatalf("Failed to migrate database: %v", err)
+		return err
+	}
+
+	log.Println("Database migrated successfully")
+	return nil
+}
+
+func GetDB() *gorm.DB {
+	return db
+}
+
+
+--- internal/services/monitoring.go ---
+package services
+
+import (
+	"scan_backend/models"
+	"scan_backend/internal/utils"
+	"time"
+)
+
+func SaveMonitorNotification(tool, ruleName, receivedAt string, details map[string]interface{}) error {
+	parsedTime, err := time.Parse(time.RFC3339, receivedAt)
+	if err != nil {
+		return err
+	}
+
+	notification := models.MonitorNotification{
+		Tool:       tool,
+		RuleName:   ruleName,
+		ReceivedAt: parsedTime,
+		Details:    utils.ToJSON(details),
+	}
+
+	return db.Create(&notification).Error
+}
+
+func GetMonitorDetails() (map[string]interface{}, error) {
+	// MonitorNotifications を取得
+	var notifications []models.MonitorNotification
+	if err := db.Find(&notifications).Error; err != nil {
+		return nil, err
+	}
+
+	// MappingRules を取得
+	var mappingRules []models.MappingRule
+	if err := db.Where("tool_name = ?", "Falco").Find(&mappingRules).Error; err != nil {
+		return nil, err
+	}
+
+	// チェックリスト項目をマッピング
+	checklistItemMap := map[uint]map[string]interface{}{}
+
+	for _, notification := range notifications {
+		// MappingRule に基づいてチェックリスト項目を特定
+		var matchedRule *models.MappingRule
+		for _, rule := range mappingRules {
+			if rule.ExpectedValue == notification.RuleName {
+				matchedRule = &rule
+				break
+			}
+		}
+
+		if matchedRule == nil {
+			continue // マッチするルールがない場合はスキップ
+		}
+
+		// チェックリスト項目を取得
+		var checklistItem models.ChecklistItem
+		if err := db.First(&checklistItem, "id = ?", matchedRule.ChecklistItemID).Error; err != nil {
+			continue
+		}
+
+		// チェックリスト項目がすでにマップに存在するか確認
+		if _, exists := checklistItemMap[checklistItem.ID]; !exists {
+			// セキュリティスタンダードを取得
+			var standards []models.ChecklistItemSecurityStandard
+			db.Preload("Sections").Preload("SecurityStandard").Where("checklist_item_id = ?", checklistItem.ID).Find(&standards)
+
+			securityStandards := []map[string]interface{}{}
+			for _, standard := range standards {
+				sections := []string{}
+				for _, section := range standard.Sections {
+					sections = append(sections, section.Section)
+				}
+				securityStandards = append(securityStandards, map[string]interface{}{
+					"ChecklistItemID":   standard.ChecklistItemID,
+					"ID":                standard.ID,
+					"Sections":          sections,
+					"SecurityStandardID": standard.SecurityStandardID,
+					"Name":              standard.SecurityStandard.Name,
+					"Version":           standard.SecurityStandard.Version,
+				})
+			}
+
+			// 新しいチェックリスト項目を作成
+			checklistItemMap[checklistItem.ID] = map[string]interface{}{
+				"checklist_item_id": checklistItem.ID,
+				"phase":             checklistItem.Phase,
+				"category":          checklistItem.Category,
+				"subcategory":       checklistItem.Subcategory,
+				"description":       checklistItem.Description,
+				"severity":          checklistItem.Severity,
+				"notifications":     []map[string]interface{}{},
+				"security_standards": securityStandards,
+			}
+		}
+
+		// 通知を既存のチェックリスト項目に追加
+		checklistItemMap[checklistItem.ID]["notifications"] = append(
+			checklistItemMap[checklistItem.ID]["notifications"].([]map[string]interface{}),
+			map[string]interface{}{
+				"rule_name":   notification.RuleName,
+				"received_at": notification.ReceivedAt,
+				"tool":		   notification.Tool,
+				"details":     utils.ParseJSONString(notification.Details),
+			},
+		)
+	}
+
+	// マップをリスト形式に変換
+	checklistItems := []map[string]interface{}{}
+	for _, item := range checklistItemMap {
+		checklistItems = append(checklistItems, item)
+	}
+
+	// 結果を構築
+	result := map[string]interface{}{
+		"phase": "PostDeploy",
+		"result": map[string]interface{}{
+			"checklist_items": checklistItems,
+		},
+	}
+
+	return result, nil
+}
+
+
+--- internal/services/trivy.go ---
+package services
+
+import (
+	"scan_backend/models"
+	"scan_backend/internal/utils"
+
+	"encoding/json"
+	"fmt"
+	"os/exec"
+)
+
+type TrivyResult struct {
+	ArtifactName string                 `json:"ArtifactName"`
+	Metadata     map[string]interface{} `json:"Metadata"`
+	Results      []struct {
+		Target          string `json:"Target"`
+		Class           string `json:"Class"`
+		Type            string `json:"Type"`
+		Vulnerabilities []struct {
+			VulnerabilityID string `json:"VulnerabilityID"`
+			PkgName         string `json:"PkgName"`
+			Severity        string `json:"Severity"`
+			InstalledVersion string `json:"InstalledVersion"`
+			FixedVersion     string `json:"FixedVersion"`
+			Status           string `json:"Status"`
+			PrimaryURL       string `json:"PrimaryURL"`
+			DataSource       map[string]string `json:"DataSource"`
+			Title        string   `json:"Title"`
+			Description  string   `json:"Description"`
+			CweIDs       []string `json:"CweIDs"`
+			VendorSeverity map[string]int `json:"VendorSeverity"`
+			CVSS             map[string]map[string]interface{} `json:"CVSS"`
+			References       []string `json:"References"`
+			PublishedDate    string   `json:"PublishedDate"`
+			LastModifiedDate string   `json:"LastModifiedDate"`
+		} `json:"Vulnerabilities"`
+	} `json:"Results"`
+}
+
+func RunTrivy(scanID int, options map[string]interface{}) error {
+	image, ok := options["image"].(string)
+	if !ok {
+		return fmt.Errorf("invalid options: 'image' is required for Trivy")
+	}
+
+	cmd := exec.Command("trivy", "image", "--format", "json", image, "--quiet")
+	out, err := cmd.Output()
+	if err != nil {
+		return fmt.Errorf("error running Trivy: %v", err)
+	}
+
+	var result TrivyResult
+	if err := json.Unmarshal(out, &result); err != nil {
+		return fmt.Errorf("error parsing Trivy result: %v", err)
+	}
+
+	return SaveTrivyResult(scanID, &result)
+}
+
+func SaveTrivyResult(scanID int, result *TrivyResult) error {
+	// ScanTargetを保存
+	target := models.ScanTarget{
+		ScanSummaryID:  uint(scanID),
+		TargetName:     result.ArtifactName,
+		TargetMetadata: utils.ToJSON(result.Metadata),
+	}
+	if err := db.Create(&target).Error; err != nil {
+		return fmt.Errorf("failed to save scan target: %v", err)
+	}
+
+	// ScanControlを保存し、ScanTargetと関連付け
+	for _, res := range result.Results {
+		control := models.ScanControl{
+			ScanTargetID:   target.ID,
+			ControlID:      res.Type,
+			ControlName:    res.Class,
+			ControlStatus:  "Fail", // 状態は適宜設定
+			ControlDetails: utils.ToJSON(res.Vulnerabilities),
+		}
+
+		// スキャンごとに独立したエントリを保存
+		if err := db.Create(&control).Error; err != nil {
+			return fmt.Errorf("failed to save scan control: %v", err)
+		}
+	}
+
+	return nil
+}
+
+
+
+--- internal/services/kubescape.go ---
+package services
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"io/ioutil"
+	"net/http"
+	"time"
+
+	"scan_backend/models"
+	"scan_backend/internal/utils"
+)
+
+const kubescapeBaseURL = "http://kubescape.kubescape.svc.cluster.local:8080"
+
+// デフォルトのスキャン設定
+var defaultScanBody = map[string]interface{}{
+	"excludedNamespaces":   []string{"kube-system"},
+	"failThreshold":        42,
+	"complianceThreshold":  42,
+	"format":               "json",
+	"hostScanner":          false,
+	"includeNamespaces":    []string{"default"},
+	"keepLocal":            true,
+	"submit":               false,
+	"targetNames":          []string{"all"},
+	"targetType":           "framework",
+	"useCachedArtifacts":   false,
+}
+
+
+func RunKubescape(scanID int, options map[string]interface{}) error {
+	// スキャン初期化リクエストを作成
+	scanBody := utils.MergeOptions(defaultScanBody, options)
+	bodyBytes, err := json.Marshal(scanBody)
+	if err != nil {
+		return fmt.Errorf("failed to marshal scan body: %v", err)
+	}
+
+	req, err := http.NewRequest("POST", fmt.Sprintf("%s/v1/scan?wait=false&keep=false", kubescapeBaseURL), bytes.NewBuffer(bodyBytes))
+	if err != nil {
+		return fmt.Errorf("failed to create kubescape scan request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to send kubescape scan request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := ioutil.ReadAll(resp.Body)
+		return fmt.Errorf("kubescape scan failed: %s", body)
+	}
+
+	var initResponse struct {
+		ID       string `json:"id"`
+		Response string `json:"response"`
+		Type     string `json:"type"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&initResponse); err != nil {
+		return fmt.Errorf("failed to parse kubescape scan response: %v", err)
+	}
+
+	// スキャンIDをDBに保存
+	if err := db.Model(&models.ScanSummary{}).Where("id = ?", scanID).Update("tool_scan_id", initResponse.ID).Error; err != nil {
+		return fmt.Errorf("failed to update scan_summary with tool_scan_id: %v", err)
+	}
+
+	// スキャン結果をポーリング
+	return pollKubescapeResults(scanID, initResponse.ID)
+}
+
+func pollKubescapeResults(scanID int, toolScanID string) error {
+	for {
+		time.Sleep(10 * time.Second) // 10秒ごとにポーリング
+
+		resp, err := http.Get(fmt.Sprintf("%s/v1/results?id=%s&keep=false", kubescapeBaseURL, toolScanID))
+		if err != nil {
+			return fmt.Errorf("failed to poll kubescape results: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := ioutil.ReadAll(resp.Body)
+			return fmt.Errorf("kubescape results poll failed: %s", body)
+		}
+
+		var result map[string]interface{}
+		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+			return fmt.Errorf("failed to parse kubescape result: %v", err)
+		}
+
+		// 結果がまだ取得できていない場合
+		if result["type"] == "busy" {
+			continue
+		}
+
+		// 結果をDBに保存してポーリング終了
+		return saveKubescapeResults(scanID, result)
+	}
+}
+
+func saveKubescapeResults(scanID int, result map[string]interface{}) error {
+	// ScanTargetを保存
+	target := models.ScanTarget{
+		ScanSummaryID:  uint(scanID),
+		TargetName:     "Kubernetes Cluster",
+		TargetMetadata: utils.ToJSON(result["response"].(map[string]interface{})["metadata"]),
+	}
+	if err := db.Create(&target).Error; err != nil {
+		return fmt.Errorf("failed to save kubescape scan target: %v", err)
+	}
+
+	// コントロール情報を保存
+	controls := parseKubescapeControls(result)
+	for _, control := range controls {
+		control.ScanTargetID = target.ID
+		if err := db.Create(&control).Error; err != nil {
+			return fmt.Errorf("failed to save kubescape scan control: %v", err)
+		}
+	}
+
+	return nil
+}
+
+// TODO: リファクタリング
+func parseKubescapeControls(result map[string]interface{}) []models.ScanControl {
+	var controls []models.ScanControl
+
+	// summaryDetails.controls を取得
+	summaryDetails, ok := result["response"].(map[string]interface{})["summaryDetails"].(map[string]interface{})
+	if !ok {
+		return controls
+	}
+
+	rawControls, ok := summaryDetails["controls"].(map[string]interface{})
+	if !ok {
+		return controls
+	}
+
+	// control_details に入れる情報は、response.summaryDetails.controls を元としている
+	// kubescapeの出力では仕様?で、response.summaryDetails.controls.resourceIDs が空になってしまっているため
+	// この情報を補完するためには、response.results からresourceID と controlID の対応付けをする必要がある
+
+	// controlID(e.g. C-0185) をキーとして、そのコントロールに関連付けられた resourceID のリストを値として保持するマップを作成
+	resourceControlMap := map[string][]map[string]string{}
+	if rawResults, ok := result["response"].(map[string]interface{})["results"].([]interface{}); ok {
+		// response.results から resourceID を取得
+		for _, rawResult := range rawResults {
+			resultMap, ok := rawResult.(map[string]interface{})
+			if !ok {
+				continue
+			}
+
+			resourceID := fmt.Sprintf("%v", resultMap["resourceID"])
+			// response.resultsの resource に関連付けられた controls を取得
+			if rawResultControls, ok := resultMap["controls"].([]interface{}); ok {
+				for _, rawControl := range rawResultControls {
+					controlMap, ok := rawControl.(map[string]interface{})
+					if !ok {
+						continue
+					}
+
+					controlID := fmt.Sprintf("%v", controlMap["controlID"])
+					status := fmt.Sprintf("%v", controlMap["status"].(map[string]interface{})["status"])
+
+					// resourceIDとstatusを対応付け
+					resourceControlMap[controlID] = append(resourceControlMap[controlID], map[string]string{
+						"resourceID": resourceID,
+						"status":     status,
+					})
+				}
+			}
+		}
+	}
+
+	// controls をパース
+	for controlID, controlData := range rawControls {
+		controlMap, ok := controlData.(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		// resourceIDs に対応するリソースデータを挿入
+		resourceData := resourceControlMap[controlID]
+
+		// ControlDetailsを構築
+		controlDetails := map[string]interface{}{
+			"resourceIDs":        resourceData,
+			"ResourceCounters":   controlMap["ResourceCounters"],
+			"subStatusCounters":  controlMap["subStatusCounters"],
+			"score":              controlMap["score"],
+			"complianceScore":    controlMap["complianceScore"],
+			"category":           controlMap["category"],
+		}
+
+		// ScanControlデータを追加
+		controls = append(controls, models.ScanControl{
+			ControlID:      fmt.Sprintf("%v", controlMap["controlID"]),
+			ControlName:    fmt.Sprintf("%v", controlMap["name"]),
+			ControlStatus:  fmt.Sprintf("%v", controlMap["status"]),
+			ControlDetails: utils.ToJSON(controlDetails),
+		})
+	}
+
+	return controls
+}
+
+
+--- internal/services/scan_history.go ---
+package services
+
+import (
+	"scan_backend/models"
+)
+
+func GetScanHistory(phase string) ([]map[string]interface{}, error) {
+	var scanSummaries []models.ScanSummary
+	query := db
+
+	// フェーズが指定されている場合はフィルタリング
+	if phase != "" {
+		query = query.Where("phase = ?", phase)
+	}
+
+	if err := query.Preload("ScanTargets").Find(&scanSummaries).Error; err != nil {
+		return nil, err
+	}
+
+	// レスポンス構造を構築
+	history := []map[string]interface{}{}
+	for _, summary := range scanSummaries {
+		targets := []map[string]interface{}{}
+		for _, target := range summary.ScanTargets {
+			targets = append(targets, map[string]interface{}{
+				"id":   target.ID,
+				"name": target.TargetName,
+			})
+		}
+
+		history = append(history, map[string]interface{}{
+			"id":      summary.ID,
+			"phase":   summary.Phase,
+			"tool":    summary.Tool,
+			"scan_time": summary.ScanTime,
+			"status":  summary.Status,
+			"details": summary.Details,
+			"targets": targets,
+		})
+	}
+
+	return history, nil
+}
+
+
+package main
+
+import (
+	"log"
+	"scan_backend/internal/handlers"
+	"scan_backend/internal/services"
+
+	"github.com/gin-gonic/gin"
+)
+
+--- main.go ---
+func main() {
+	// データベースの初期化
+	if err := services.InitDatabase(); err != nil {
+		log.Fatalf("Failed to initialize database: %v", err)
+	}
+
+	// Ginのルーター作成
+	r := gin.Default()
+
+	// APIルートの定義
+	api := r.Group("/api")
+	{
+		api.POST("/scan/start", handlers.StartScan)       // スキャン実行
+		api.GET("/scan/history", handlers.GetScanHistory)      // スキャン履歴取得
+		api.GET("/scan/:scan_id/details", handlers.GetScanDetails) // スキャン詳細取得
+		api.POST("/monitor/notify", handlers.ReceiveMonitorNotification) // モニタリング通知受信
+		api.GET("/monitor/details", handlers.GetMonitorDetails) // モニタリング通知取得
+		api.GET("/checklist_items", handlers.GetChecklistItems) // チェックリストアイテム取得
+		api.POST("/checklist_items/upload", handlers.UploadChecklist) // チェックリストアップロード
+	}
+	// サーバーの起動
+	log.Println("Server running on port 8080")
+	if err := r.Run(":8080"); err != nil {
+		log.Fatalf("Failed to start server: %v", err)
+	}
+}

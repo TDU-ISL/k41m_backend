@@ -1,0 +1,456 @@
+{
+  "id": "238d6156-3dda-497f-8c72-2b2023ff09a0",
+  "type": "",
+  "response": {
+    "generationTime": "0001-01-01T00:00:00Z",
+    "clusterAPIServerInfo": {
+      "major": "1",
+      "minor": "27",
+      "gitVersion": "v1.27.16",
+      "gitCommit": "cbb86e0d7f4a049666fac0551e8b02ef3d6c3d9a",
+      "gitTreeState": "clean",
+      "buildDate": "2024-07-17T01:44:26Z",
+      "goVersion": "go1.22.5",
+      "compiler": "gc",
+      "platform": "linux/amd64"
+    },
+    "clusterCloudProvider": "",
+    "customerGUID": "",
+    "clusterName": "",
+    "reportGUID": "",
+    "jobID": "",
+    "summaryDetails": {
+      "controls": {
+        "C-0002": {
+          "statusInfo": {
+            "status": "failed"
+          },
+          "controlID": "C-0002",
+          "name": "Prevent containers from allowing command execution",
+          "status": "failed",
+          "resourceIDs": {},
+          "ResourceCounters": {
+            "passedResources": 24,
+            "failedResources": 1,
+            "skippedResources": 0,
+            "excludedResources": 0
+          },
+          "subStatusCounters": {
+            "ignoredResources": 0
+          },
+          "score": 0,
+          "complianceScore": 96,
+          "scoreFactor": 5,
+          "category": {
+            "name": "Access control",
+            "id": "Cat-2"
+          }
+        },
+        "C-0005": {
+          "statusInfo": {
+            "status": "passed",
+            "subStatus": "irrelevant"
+          },
+          "controlID": "C-0005",
+          "name": "API server insecure port is enabled",
+          "status": "passed",
+          "resourceIDs": {},
+          "ResourceCounters": {
+            "passedResources": 0,
+            "failedResources": 0,
+            "skippedResources": 0,
+            "excludedResources": 0
+          },
+          "subStatusCounters": {
+            "ignoredResources": 0
+          },
+          "score": 0,
+          "complianceScore": 100,
+          "scoreFactor": 9,
+          "category": {
+            "name": "Control plane",
+            "id": "Cat-1"
+          }
+        }
+      },
+      "status": "failed",
+      "frameworks": [
+        {
+          "controls": {
+            "C-0002": {
+              "statusInfo": {
+                "status": "failed"
+              },
+              "controlID": "C-0002",
+              "name": "Prevent containers from allowing command execution",
+              "status": "failed",
+              "resourceIDs": {},
+              "ResourceCounters": {
+                "passedResources": 24,
+                "failedResources": 1,
+                "skippedResources": 0,
+                "excludedResources": 0
+              },
+              "subStatusCounters": {
+                "ignoredResources": 0
+              },
+              "score": 0,
+              "complianceScore": 96,
+              "scoreFactor": 5,
+              "category": {
+                "name": "Access control",
+                "id": "Cat-2"
+              }
+            },
+            "C-0005": {
+              "statusInfo": {
+                "status": "passed",
+                "subStatus": "irrelevant"
+              },
+              "controlID": "C-0005",
+              "name": "API server insecure port is enabled",
+              "status": "passed",
+              "resourceIDs": {},
+              "ResourceCounters": {
+                "passedResources": 0,
+                "failedResources": 0,
+                "skippedResources": 0,
+                "excludedResources": 0
+              },
+              "subStatusCounters": {
+                "ignoredResources": 0
+              },
+              "score": 0,
+              "complianceScore": 100,
+              "scoreFactor": 9,
+              "category": {
+                "name": "Control plane",
+                "id": "Cat-1"
+              }
+            },
+            "C-0012": {
+              "statusInfo": {
+                "status": "skipped",
+                "subStatus": "configuration",
+                "info": "Control configurations are empty (docs: https://kubescape.io/docs/frameworks-and-controls/configuring-controls)"
+              },
+              "controlID": "C-0012",
+              "name": "Applications credentials in configuration files",
+              "status": "skipped",
+              "resourceIDs": {},
+              "ResourceCounters": {
+                "passedResources": 0,
+                "failedResources": 0,
+                "skippedResources": 27,
+                "excludedResources": 0
+              },
+              "subStatusCounters": {
+                "ignoredResources": 0
+              },
+              "score": 0,
+              "complianceScore": 0,
+              "scoreFactor": 8,
+              "category": {
+                "name": "Secrets",
+                "id": "Cat-3"
+              }
+            }
+          },
+          "name": "NSA",
+          "status": "failed",
+          "version": "",
+          "ResourceCounters": {
+            "passedResources": 28,
+            "failedResources": 32,
+            "skippedResources": 16,
+            "excludedResources": 0
+          },
+          "score": 0,
+          "complianceScore": 48.089092
+        },
+        {
+          "controls": {
+            "C-0002": {
+              "statusInfo": {
+                "status": "failed"
+              },
+              "controlID": "C-0002",
+              "name": "Prevent containers from allowing command execution",
+              "status": "failed",
+              "resourceIDs": {},
+              "ResourceCounters": {
+                "passedResources": 24,
+                "failedResources": 1,
+                "skippedResources": 0,
+                "excludedResources": 0
+              },
+              "subStatusCounters": {
+                "ignoredResources": 0
+              },
+              "score": 0,
+              "complianceScore": 96,
+              "scoreFactor": 5,
+              "category": {
+                "name": "Access control",
+                "id": "Cat-2"
+              }
+            },
+            "C-0007": {
+              "statusInfo": {
+                "status": "failed"
+              },
+              "controlID": "C-0007",
+              "name": "Roles with delete capabilities",
+              "status": "failed",
+              "resourceIDs": {},
+              "ResourceCounters": {
+                "passedResources": 19,
+                "failedResources": 6,
+                "skippedResources": 0,
+                "excludedResources": 0
+              },
+              "subStatusCounters": {
+                "ignoredResources": 0
+              },
+              "score": 0,
+              "complianceScore": 76,
+              "scoreFactor": 5,
+              "category": {
+                "name": "Access control",
+                "id": "Cat-2"
+              }
+            },
+            "C-0012": {
+              "statusInfo": {
+                "status": "skipped",
+                "subStatus": "configuration",
+                "info": "Control configurations are empty (docs: https://kubescape.io/docs/frameworks-and-controls/configuring-controls)"
+              },
+              "controlID": "C-0012",
+              "name": "Applications credentials in configuration files",
+              "status": "skipped",
+              "resourceIDs": {},
+              "ResourceCounters": {
+                "passedResources": 0,
+                "failedResources": 0,
+                "skippedResources": 27,
+                "excludedResources": 0
+              },
+              "subStatusCounters": {
+                "ignoredResources": 0
+              },
+              "score": 0,
+              "complianceScore": 0,
+              "scoreFactor": 8,
+              "category": {
+                "name": "Secrets",
+                "id": "Cat-3"
+              }
+            },
+            "C-0014": {
+              "statusInfo": {
+                "status": "passed"
+              },
+              "controlID": "C-0014",
+              "name": "Access Kubernetes dashboard",
+              "status": "passed",
+              "resourceIDs": {},
+              "ResourceCounters": {
+                "passedResources": 36,
+                "failedResources": 0,
+                "skippedResources": 0,
+                "excludedResources": 0
+              },
+              "subStatusCounters": {
+                "ignoredResources": 0
+              },
+              "score": 0,
+              "complianceScore": 100,
+              "scoreFactor": 2,
+              "category": {
+                "name": "Access control",
+                "id": "Cat-2"
+              }
+            }
+          },
+          "name": "MITRE",
+          "status": "failed",
+          "version": "",
+          "ResourceCounters": {
+            "passedResources": 21,
+            "failedResources": 20,
+            "skippedResources": 24,
+            "excludedResources": 0
+          },
+          "score": 0,
+          "complianceScore": 72.51748
+        }
+      ],
+      "resourcesSeverityCounters": {
+        "criticalSeverity": 0,
+        "highSeverity": 30,
+        "mediumSeverity": 80,
+        "lowSeverity": 8
+      },
+      "controlsSeverityCounters": {
+        "criticalSeverity": 0,
+        "highSeverity": 8,
+        "mediumSeverity": 12,
+        "lowSeverity": 1
+      },
+      "ResourceCounters": {
+        "passedResources": 21,
+        "failedResources": 41,
+        "skippedResources": 16,
+        "excludedResources": 0
+      },
+      "score": 0,
+      "complianceScore": 61.66084
+    },
+    "attributes": null,
+    "results": [
+      {
+        "resourceID": "/trivy-system/ServiceAccount/trivy-operator/rbac.authorization.k8s.io/v1//ClusterRole/trivy-operator/rbac.authorization.k8s.io/v1//ClusterRoleBinding/trivy-operator",
+        "controls": [
+          {
+            "controlID": "C-0053",
+            "name": "Access container service account",
+            "status": {
+              "status": "failed"
+            },
+            "rules": [
+              {
+                "name": "access-container-service-account-v1",
+                "status": "failed",
+                "subStatus": ""
+              }
+            ]
+          },
+          {
+            "controlID": "C-0035",
+            "name": "Administrative Roles",
+            "status": {
+              "status": "passed"
+            },
+            "rules": [
+              {
+                "name": "rule-list-all-cluster-admins-v1",
+                "status": "passed",
+                "subStatus": ""
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "resourceID": "/v1/kube-public/ServiceAccount/default",
+        "controls": [
+          {
+            "controlID": "C-0034",
+            "name": "Automatic mapping of service account",
+            "status": {
+              "status": "failed"
+            },
+            "rules": [
+              {
+                "name": "automount-service-account",
+                "status": "failed",
+                "subStatus": "",
+                "paths": [
+                  {
+                    "resourceID": "/v1/kube-public/ServiceAccount/default",
+                    "fixPath": {
+                      "path": "automountServiceAccountToken",
+                      "value": "false"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "resourceID": "/v1/local-path-storage/ServiceAccount/local-path-storage-local-path-provisioner",
+        "controls": [
+          {
+            "controlID": "C-0034",
+            "name": "Automatic mapping of service account",
+            "status": {
+              "status": "failed"
+            },
+            "rules": [
+              {
+                "name": "automount-service-account",
+                "status": "failed",
+                "subStatus": "",
+                "paths": [
+                  {
+                    "resourceID": "/v1/local-path-storage/ServiceAccount/local-path-storage-local-path-provisioner",
+                    "fixPath": {
+                      "path": "automountServiceAccountToken",
+                      "value": "false"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "resourceID": "/v1/kube-public/ConfigMap/kube-root-ca.crt",
+        "controls": [
+          {
+            "controlID": "C-0012",
+            "name": "Applications credentials in configuration files",
+            "status": {
+              "status": "skipped",
+              "subStatus": "configuration",
+              "info": "Control configurations are empty (docs: https://kubescape.io/docs/frameworks-and-controls/configuring-controls)"
+            },
+            "rules": [
+              {
+                "name": "rule-credentials-configmap",
+                "status": "passed",
+                "subStatus": ""
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "metadata": {
+      "targetMetadata": {
+        "clusterContextMetadata": {
+          "namespaceToNumberOfResources": {
+            "default": 5,
+            "falco": 21,
+            "kube-flannel": 5,
+            "kube-node-lease": 2,
+            "kube-public": 7,
+            "local-path-storage": 7,
+            "trivy-system": 14
+          },
+          "contextName": "isl-k8s",
+          "numberOfWorkerNodes": 3
+        }
+      },
+      "clusterMetadata": {},
+      "scanMetadata": {
+        "targetType": "Framework",
+        "kubescapeVersion": "v3.0.21",
+        "formatVersion": "v2",
+        "formats": ["json"],
+        "targetNames": ["nsa", "mitre"],
+        "failThreshold": 100,
+        "hostScanner": true
+      }
+    },
+    "paginationInfo": {
+      "chunkNumber": 0,
+      "isLastChunk": false
+    },
+    "customerGUIDGenerated": false
+  }
+}

@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: go-test
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: go-test
+  template:
+    metadata:
+      labels:
+        app: go-test
+    spec:
+      initContainers:
+      - name: wait-for-postgres
+        image: public.ecr.aws/docker/library/busybox:1.37.0
+        command: ['sh', '-c', 'until nc -z postgresql 5432; do echo "Waiting for PostgreSQL..."; sleep 2; done']
+      containers:
+      - name: go-test
+        image: hiroto1212/isl-k8s-backend # ここはそれぞれ環境に合わせて変更する
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8080
+        env:
+          - name: DATABASE_URL
+            value: "host=postgresql user=user password=password dbname=mydb port=5432 sslmode=disable"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: go-test
+spec:
+  selector:
+    app: go-test
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8080
+  type: LoadBalancer

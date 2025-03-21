@@ -1,0 +1,7 @@
+[build]
+cmd = "go build -o main ."
+bin = "main"
+watch_dir = "."
+
+[log]
+level = "info"

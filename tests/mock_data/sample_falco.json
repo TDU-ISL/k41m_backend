@@ -1,0 +1,40 @@
+{
+  "uuid": "24b4a751-5446-421e-b8d7-14d2136066ec",
+  "output": "02:15:58.724234996: Notice Unexpected connection to K8s API Server from container (connection=172.18.1.59:46110->10.96.0.1:443 lport=443 rport=46110 fd_type=ipv4 fd_proto=tcp evt_type=connect user=root user_uid=0 user_loginuid=-1 process=flanneld proc_exepath=/opt/bin/flanneld parent=containerd-shim command=flanneld --ip-masq --kube-subnet-mgr terminal=0 container_id=1b29a089893d container_image=docker.io/flannel/flannel container_image_tag=v0.25.5 container_name=kube-flannel k8s_ns=kube-flannel k8s_pod_name=kube-flannel-ds-pjs7k)",
+  "priority": "Notice",
+  "rule": "Contact K8S API Server From Container",
+  "time": "2024-12-06T02:15:58.724234996Z",
+  "source": "syscall",
+  "output_fields": {
+    "container.id": "1b29a089893d",
+    "container.image.repository": "docker.io/flannel/flannel",
+    "container.image.tag": "v0.25.5",
+    "container.name": "kube-flannel",
+    "evt.time": 1733451358724235000,
+    "evt.type": "connect",
+    "fd.l4proto": "tcp",
+    "fd.lport": 443,
+    "fd.name": "172.18.1.59:46110->10.96.0.1:443",
+    "fd.rport": 46110,
+    "fd.type": "ipv4",
+    "k8s.ns.name": "kube-flannel",
+    "k8s.pod.name": "kube-flannel-ds-pjs7k",
+    "proc.cmdline": "flanneld --ip-masq --kube-subnet-mgr",
+    "proc.exepath": "/opt/bin/flanneld",
+    "proc.name": "flanneld",
+    "proc.pname": "containerd-shim",
+    "proc.tty": 0,
+    "user.loginuid": -1,
+    "user.name": "root",
+    "user.uid": 0
+  },
+  "hostname": "k8s-master-1",
+  "tags": [
+    "T1565",
+    "container",
+    "k8s",
+    "maturity_stable",
+    "mitre_discovery",
+    "network"
+  ]
+}
