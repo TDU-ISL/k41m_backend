@@ -8,18 +8,23 @@ import (
 	"strconv"
 	"fmt"
 
-	"github.com/xuri/excelize/v2"
+	"k41m_backend/models"
+	"k41m_backend/internal/constants"
 
-	"scan_backend/models"
+	"github.com/xuri/excelize/v2"
 )
 
 func GetChecklistItems(phase string) ([]map[string]interface{}, error) {
 	var checklistItems []models.ChecklistItem
 	query := db
-
-	// フェーズが指定されている場合はフィルタリング
+	
+	// フェーズが指定されている場合はマッピングしてフィルタリング
 	if phase != "" {
-		query = query.Where("phase = ?", phase)
+		mappedPhase, ok := constants.PhaseMap[phase]
+		if !ok {
+			return nil, fmt.Errorf("Invalid phase value: %s", phase)
+		}
+		query = query.Where("phase = ?", mappedPhase)
 	}
 
 	if err := query.Find(&checklistItems).Error; err != nil {

@@ -3,7 +3,7 @@ package services
 import (
 	"log"
 	"os"
-	"scan_backend/models"
+	"k41m_backend/models"
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"

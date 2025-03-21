@@ -1,8 +1,8 @@
 package services
 
 import (
-	"scan_backend/models"
-	"scan_backend/internal/utils"
+	"k41m_backend/models"
+	"k41m_backend/internal/utils"
 	"time"
 )
 
@@ -113,6 +113,7 @@ func GetMonitorDetails() (map[string]interface{}, error) {
 
 	// 結果を構築
 	result := map[string]interface{}{
+		// TODO: ハードコードを定数に置き換え
 		"phase": "PostDeploy",
 		"result": map[string]interface{}{
 			"checklist_items": checklistItems,

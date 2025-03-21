@@ -3,13 +3,14 @@ package handlers
 import (
 	"net/http"
 	"time"
-	"scan_backend/internal/services"
-	"scan_backend/models"
+	"k41m_backend/internal/services"
+	"k41m_backend/models"
+	"k41m_backend/internal/constants"
 
 	"github.com/gin-gonic/gin"
 )
 
-func StartScan(c *gin.Context) {
+func StartScanHandler(c *gin.Context) {
 	var req struct {
 		Phase   string                 `json:"phase"`
 		Tool    string                 `json:"tool"`
@@ -23,7 +24,7 @@ func StartScan(c *gin.Context) {
 
 	// スキャン概要の登録
 	scan := models.ScanSummary{
-		Phase:    req.Phase,
+		Phase:    constants.PhaseMap[req.Phase],
 		Tool:     req.Tool,
 		ScanTime: time.Now(),
 		Status:   "running",

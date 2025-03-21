@@ -2,12 +2,12 @@ package handlers
 
 import (
 	"net/http"
-	"scan_backend/internal/services"
+	"k41m_backend/internal/services"
 
 	"github.com/gin-gonic/gin"
 )
 
-func GetScanHistory(c *gin.Context) {
+func GetScanHistoryHandler(c *gin.Context) {
 	// クエリパラメータからフェーズを取得
 	phase := c.DefaultQuery("phase", "")
 

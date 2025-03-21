@@ -8,8 +8,8 @@ import (
 	"net/http"
 	"time"
 
-	"scan_backend/models"
-	"scan_backend/internal/utils"
+	"k41m_backend/models"
+	"k41m_backend/internal/utils"
 )
 
 const kubescapeBaseURL = "http://kubescape.kubescape.svc.cluster.local:8080"
@@ -184,7 +184,6 @@ func parseKubescapeControls(result map[string]interface{}) []models.ScanControl 
 		if !ok {
 			continue
 		}
-		fmt.Println(controlID,resourceControlMap[controlID])
 
 		// resourceIDs に対応するリソースデータを挿入
 		resourceData := resourceControlMap[controlID]

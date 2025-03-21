@@ -2,12 +2,12 @@ package handlers
 
 import (
 	"net/http"
-	"scan_backend/internal/services"
+	"k41m_backend/internal/services"
 
 	"github.com/gin-gonic/gin"
 )
 
-func GetScanDetails(c *gin.Context) {
+func GetScanDetailsHandler(c *gin.Context) {
 	scanID := c.Param("scan_id")
 	phase := c.Query("phase")
 

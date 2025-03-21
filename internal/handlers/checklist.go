@@ -4,12 +4,12 @@ import (
 	"net/http"
 	"os"
 
-	"scan_backend/internal/services"
+	"k41m_backend/internal/services"
 
 	"github.com/gin-gonic/gin"
 )
 
-func GetChecklistItems(c *gin.Context) {
+func GetChecklistItemsHandler(c *gin.Context) {
 	// クエリパラメータからフェーズを取得
 	phase := c.DefaultQuery("phase", "")
 
@@ -23,7 +23,7 @@ func GetChecklistItems(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"checklist_items": items})
 }
 
-func UploadChecklist(c *gin.Context) {
+func UploadChecklistHandler(c *gin.Context) {
 	file, err := c.FormFile("file")
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "File is required"})

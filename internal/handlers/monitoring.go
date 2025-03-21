@@ -2,14 +2,14 @@ package handlers
 
 import (
 	"net/http"
-	"scan_backend/internal/services"
+	"k41m_backend/internal/services"
 
 	"github.com/gin-gonic/gin"
 )
 
 // ツールから通知を受け取り、データベースに保存する
 // 現状falcoからの通知のみを想定しているため、他ツールを使う場合には拡張が必要
-func ReceiveMonitorNotification(c *gin.Context) {
+func ReceiveMonitorNotificationHandler(c *gin.Context) {
 	var payload map[string]interface{}
 
 	// リクエストボディをバインド
@@ -50,7 +50,7 @@ func ReceiveMonitorNotification(c *gin.Context) {
 }
 
 
-func GetMonitorDetails(c *gin.Context) {
+func GetMonitorDetailsHandler(c *gin.Context) {
 	results, err := services.GetMonitorDetails()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve monitor details"})

@@ -1,7 +1,9 @@
 package services
 
 import (
-	"scan_backend/models"
+	"fmt"
+	"k41m_backend/models"
+	"k41m_backend/internal/constants"
 )
 
 func GetScanHistory(phase string) ([]map[string]interface{}, error) {
@@ -10,7 +12,11 @@ func GetScanHistory(phase string) ([]map[string]interface{}, error) {
 
 	// フェーズが指定されている場合はフィルタリング
 	if phase != "" {
-		query = query.Where("phase = ?", phase)
+		mappedPhase, ok := constants.PhaseMap[phase]
+		if !ok {
+			return nil, fmt.Errorf("Invalid phase value: %s", phase)
+		}
+		query = query.Where("phase = ?", mappedPhase)
 	}
 
 	if err := query.Preload("ScanTargets").Find(&scanSummaries).Error; err != nil {

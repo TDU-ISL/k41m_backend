@@ -1,4 +1,4 @@
-module scan_backend
+module k41m_backend
 
 go 1.23.0
 

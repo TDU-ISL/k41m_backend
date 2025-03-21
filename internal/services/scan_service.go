@@ -1,8 +1,8 @@
 package services
 
 import (
-	"scan_backend/internal/utils"
-	"scan_backend/models"
+	"k41m_backend/internal/utils"
+	"k41m_backend/models"
 )
 
 func SaveScanSummary(scan *models.ScanSummary) error {
